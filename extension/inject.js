@@ -133,11 +133,18 @@
     return null;
   };
 
+  // Scope roots already being watched. An AJAX-driven UI replaces the scope
+  // element wholesale rather than mutating it, and an observer stays bound to
+  // the node it was given — so without re-binding, watching survives exactly
+  // one rebuild and then goes quiet without saying so.
+  const observed = new WeakSet();
+
   const startScopeWatch = () => {
     const selector = config.domScope;
     if (!selector) return;
     const root = document.querySelector(selector);
-    if (!root) return false;
+    if (!root || observed.has(root)) return false;
+    observed.add(root);
 
     new MutationObserver((records) => {
       pending = pending || { scope: selector, added: 0, removed: 0, attributes: 0, messages: [] };
@@ -162,13 +169,13 @@
   };
 
   if (config.domScope) {
-    // The scope element often arrives with the AJAX form rather than the page.
-    if (!startScopeWatch()) {
-      let tries = 0;
-      const timer = setInterval(() => {
-        if (startScopeWatch() || ++tries > 60) clearInterval(timer);
-      }, 500);
-    }
+    // Polled rather than one-shot: the scope element usually arrives with an
+    // AJAX response instead of the page, and is replaced again on every
+    // subsequent one. Cheap — a querySelector against a WeakSet check — and it
+    // runs for the life of the page so a scope that comes and goes keeps being
+    // picked up.
+    startScopeWatch();
+    setInterval(startScopeWatch, 1000);
   }
 
   // --- manual marks --------------------------------------------------------
