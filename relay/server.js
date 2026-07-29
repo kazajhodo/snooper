@@ -52,6 +52,17 @@ function format(event, page) {
 const QUERY_WINDOW_MS = 700;
 const pendingQueries = new Map();
 
+/**
+ * Relay and extension are updated independently, so an older extension may not
+ * send `count`. Reading it back out of the text keeps a version skew from
+ * reporting every frame as a miss — a wrong answer is worse than a stale one.
+ */
+function countOf(event) {
+  if (typeof event.count === 'number') return event.count;
+  const match = /→\s*(\d+)\s*match/.exec(event.text || '');
+  return match ? Number(match[1]) : 0;
+}
+
 function bufferQuery(event, page) {
   const key = event.selector || event.text || '?';
   let entry = pendingQueries.get(key);
@@ -60,10 +71,11 @@ function bufferQuery(event, page) {
     pendingQueries.set(key, entry);
     entry.timer = setTimeout(() => flushQuery(key), QUERY_WINDOW_MS);
   }
+  const count = countOf(event);
   // Nested same-origin frames answer twice with identical results.
-  const seen = entry.frames.some((f) => f.page === page && f.count === event.count && f.detail === event.detail);
+  const seen = entry.frames.some((f) => f.page === page && f.count === count && f.detail === event.detail);
   if (!seen) {
-    entry.frames.push({ page, count: event.count ?? 0, detail: event.detail });
+    entry.frames.push({ page, count, detail: event.detail });
   }
 }
 
