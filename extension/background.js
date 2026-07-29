@@ -24,6 +24,16 @@ const DEDUPE_MS = 5000;
 const RATE_LIMIT = 30;
 const RATE_WINDOW_MS = 60000;
 
+// Answers to a question that was just asked. They are not part of the
+// spontaneous feed the limits exist to bound, and counting them means a few
+// deliberate queries can exhaust the budget before a single real error lands.
+const SOLICITED = new Set(['mark', 'snapshot', 'query', 'ack']);
+
+// DOM summaries get their own, much tighter budget. A rich editing form mutates
+// continuously, so left on the shared counter it starves everything else.
+const DOM_LIMIT = 6;
+let domCount = 0;
+
 const recent = new Map();
 let windowStart = Date.now();
 let windowCount = 0;
@@ -117,8 +127,19 @@ function allow(event) {
   if (now - windowStart > RATE_WINDOW_MS) {
     windowStart = now;
     windowCount = 0;
+    domCount = 0;
     suppressedNotice = false;
   }
+
+  if (SOLICITED.has(event.type)) return true;
+
+  if (event.type === 'dom' && ++domCount > DOM_LIMIT) {
+    if (domCount === DOM_LIMIT + 1) {
+      send({ type: 'suppressed', text: `DOM summaries capped (${DOM_LIMIT}/min) — errors and answers still coming through`, at: now });
+    }
+    return false;
+  }
+
   if (++windowCount > RATE_LIMIT) {
     if (suppressedNotice) return false;
     suppressedNotice = true;

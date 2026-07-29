@@ -84,8 +84,13 @@ Marks and snapshots bypass dedupe — they were asked for.
 
 ## Limits worth knowing
 
-- 30 events/minute, then the feed cuts with one `SUPPRESSED` line. Silence and
-  a severed feed look identical otherwise.
+- 30 spontaneous events/minute, then the feed cuts with one `SUPPRESSED` line.
+  Silence and a severed feed look identical otherwise.
+- **DOM summaries have their own 6/minute cap.** A rich editing form mutates
+  continuously; on the shared counter it starves out the errors you actually
+  want.
+- **Answers are not rate limited** — marks, queries, snapshots and acks were
+  asked for, so they never count against the spontaneous budget.
 - Identical events collapse within 5 seconds.
 - Snapshots are capped at 12KB, other text at 800 chars.
 - The page-world hooks are installed at `document_start`, but jQuery usually is

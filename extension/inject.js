@@ -162,8 +162,10 @@
         }
       }
       // Coalesced: one AJAX rebuild produces hundreds of records and is one
-      // event as far as anyone watching is concerned.
-      if (!flushTimer) flushTimer = setTimeout(summarise, 400);
+      // event as far as anyone watching is concerned. The window is generous
+      // because rich editors mutate continuously — too short and a single form
+      // reports itself a dozen times for one user action.
+      if (!flushTimer) flushTimer = setTimeout(summarise, 1200);
     });
 
     observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'disabled', 'hidden'] });
