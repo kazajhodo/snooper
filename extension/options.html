@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Snooper</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 2rem; max-width: 40rem; }
+    h1 { font-size: 1.2rem; }
+    label { display: block; margin: 1.2rem 0 .3rem; font-weight: 600; }
+    input[type="text"] { width: 100%; padding: .4rem; font-family: ui-monospace, monospace; }
+    .hint { color: #666; font-weight: 400; font-size: .85em; }
+    .row { display: flex; align-items: center; gap: .5rem; margin-top: 1.2rem; }
+    .row label { margin: 0; }
+    button { margin-top: 1.5rem; padding: .5rem 1rem; }
+    #saved { color: #0a0; margin-left: .8rem; }
+  </style>
+</head>
+<body>
+  <h1>Snooper</h1>
+
+  <div class="row">
+    <input type="checkbox" id="enabled">
+    <label for="enabled">Enabled</label>
+  </div>
+
+  <label for="relay">Relay <span class="hint">the local server Claude subscribes to</span></label>
+  <input type="text" id="relay" placeholder="ws://localhost:8787/publish">
+
+  <label for="domains">Domains <span class="hint">comma separated; blank watches every site</span></label>
+  <input type="text" id="domains" placeholder="ddev.site, localhost">
+
+  <label for="domScope">DOM scope <span class="hint">CSS selector; changes inside it are reported as summaries. Blank disables DOM watching.</span></label>
+  <input type="text" id="domScope" placeholder=".neo-alchemist-form">
+
+  <div class="row">
+    <input type="checkbox" id="captureWarnings">
+    <label for="captureWarnings">Also capture <code>console.warn</code> <span class="hint">(noisy)</span></label>
+  </div>
+
+  <button id="save">Save</button><span id="saved" hidden>Saved</span>
+
+  <script src="options.js"></script>
+</body>
+</html>
