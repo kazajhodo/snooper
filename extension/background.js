@@ -106,7 +106,7 @@ async function handleCommand(raw) {
   }
 
   if (command === 'snap' || command === 'query') {
-    await pushToTabs({ __snoopCommand: { name: command, value } });
+    await pushToTabs({ __snoopCommand: { name: command, value, frame: message.frame } });
     return;
   }
 

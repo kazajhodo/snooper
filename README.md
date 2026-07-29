@@ -110,9 +110,15 @@ Marks and snapshots bypass dedupe — they were asked for.
   asked for, so they never count against the spontaneous budget.
 - Identical events collapse within 5 seconds.
 - Snapshots are capped at 12KB, other text at 800 chars.
-- **Queries answer per frame.** A page with preview iframes has every frame
-  reply independently, so a query's cost is multiplied before you read it —
-  hence 10 matches per frame, not 25. The reported count still tells you what
-  was left out.
+- **Queries answer per frame, and the relay folds them into one event.** A page
+  with preview iframes has every frame reply independently; the relay buffers
+  those replies for 700ms, drops the frames that matched nothing, dedupes
+  identical answers from nested same-origin frames, and emits a single line.
+  Fourteen messages become one.
+- **`--in <url-substring>` targets a frame.** `snoop.js query 'tbody tr' --in
+  size=desktop` asks only the desktop preview. The frame decides whether to
+  answer, since only it knows its own URL.
+- Each frame still caps at 10 described matches; the count says what was left
+  out.
 - The page-world hooks are installed at `document_start`, but jQuery usually is
   not defined yet — the AJAX hook retries for 10s before giving up.

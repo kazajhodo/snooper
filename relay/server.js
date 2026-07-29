@@ -46,6 +46,42 @@ function format(event, page) {
   return line;
 }
 
+// Every frame on a page answers a query independently, and on a page with
+// preview iframes most of them answer "0 matches". Folding the replies into one
+// event is the difference between fourteen messages and one.
+const QUERY_WINDOW_MS = 700;
+const pendingQueries = new Map();
+
+function bufferQuery(event, page) {
+  const key = event.selector || event.text || '?';
+  let entry = pendingQueries.get(key);
+  if (!entry) {
+    entry = { frames: [], timer: null };
+    pendingQueries.set(key, entry);
+    entry.timer = setTimeout(() => flushQuery(key), QUERY_WINDOW_MS);
+  }
+  // Nested same-origin frames answer twice with identical results.
+  const seen = entry.frames.some((f) => f.page === page && f.count === event.count && f.detail === event.detail);
+  if (!seen) {
+    entry.frames.push({ page, count: event.count ?? 0, detail: event.detail });
+  }
+}
+
+function flushQuery(key) {
+  const entry = pendingQueries.get(key);
+  pendingQueries.delete(key);
+  if (!entry) return;
+
+  const time = new Date().toTimeString().slice(0, 8);
+  const hits = entry.frames.filter((f) => f.count > 0);
+  let line = `[${time}] QUERY ${key} · ${hits.length}/${entry.frames.length} frame(s) matched`;
+  for (const hit of hits) {
+    line += `\n  ${hit.page} → ${hit.count}`;
+    if (hit.detail) line += `\n    ${hit.detail.replace(/\n/g, '\n    ')}`;
+  }
+  broadcast(line);
+}
+
 function broadcast(line) {
   history.push(line);
   if (history.length > BUFFER) history.shift();
@@ -72,7 +108,12 @@ wss.on('connection', (socket, req) => {
       catch {
         return;
       }
-      broadcast(format(payload.event || {}, payload.page));
+      const event = payload.event || {};
+      if (event.type === 'query') {
+        bufferQuery(event, payload.page);
+        return;
+      }
+      broadcast(format(event, payload.page));
     });
     return;
   }

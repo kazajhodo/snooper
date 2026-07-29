@@ -235,10 +235,13 @@
     // Ten, not twenty-five: every frame on the page answers a query
     // independently, so the reply is multiplied by frame count before it is
     // ever read. Ten is enough to pick a target; the count says how much was
-    // left out.
+    // left out. `selector` and `count` travel as fields so the relay can fold
+    // every frame's answer into one event.
     const described = nodes.slice(0, 10).map((node, i) => `${i}: ${describeNode(node)} ${nodeText(node)}`);
     post({
       type: 'query',
+      selector,
+      count: nodes.length,
       text: `${selector} → ${nodes.length} match(es)`,
       detail: described.length ? clip(described.join('\n'), 1200) : undefined,
     });
@@ -299,6 +302,9 @@
     }
     const command = e.data.__snoopCommand;
     if (!command) return;
+    // Frame targeting is decided here rather than at the sender: only the frame
+    // knows its own URL, and "the desktop preview" is a fact about the URL.
+    if (command.frame && !location.href.includes(command.frame)) return;
     if (command.name === 'snap') snapshot(command.value);
     if (command.name === 'query') query(command.value);
   });
