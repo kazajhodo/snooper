@@ -162,6 +162,15 @@ wss.on('connection', (socket, req) => {
       for (const pub of publishers) {
         if (pub.readyState === 1) pub.send(command);
       }
+      // Open the bucket now rather than on the first reply, so a query that
+      // nothing answers still reports back instead of vanishing.
+      try {
+        const parsed = JSON.parse(command);
+        if (parsed.command === 'query' && parsed.value) openQuery(parsed.value);
+      }
+      catch {
+        // Not JSON; nothing to pre-arm.
+      }
       // Echoed so the command appears in the same stream as its effects —
       // otherwise a retarget and the events it produces look unrelated.
       broadcast(format({ type: 'ack', text: `→ ${command}` }));
