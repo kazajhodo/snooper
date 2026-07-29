@@ -4,9 +4,10 @@ const defaults = {
   domains: ['ddev.site', 'localhost'],
   domScope: '',
   captureWarnings: false,
+  interactions: 'clicks',
 };
 
-const fields = ['enabled', 'relay', 'domains', 'domScope', 'captureWarnings'];
+const fields = ['enabled', 'relay', 'domains', 'domScope', 'captureWarnings', 'interactions'];
 const el = (id) => document.getElementById(id);
 
 (async () => {
@@ -25,6 +26,7 @@ el('save').addEventListener('click', async () => {
     domains: el('domains').value.split(',').map((d) => d.trim()).filter(Boolean),
     domScope: el('domScope').value.trim(),
     captureWarnings: el('captureWarnings').checked,
+    interactions: el('interactions').value,
   });
   const saved = el('saved');
   saved.hidden = false;

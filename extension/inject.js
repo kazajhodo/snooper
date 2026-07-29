@@ -205,6 +205,21 @@
   };
 
   /**
+   * An element in one line: enough to recognise it, never enough to read the
+   * page through it.
+   */
+  const describeNode = (node) => {
+    if (!node || node.nodeType !== 1) return String(node);
+    const id = node.id ? `#${node.id}` : '';
+    const cls = node.classList.length ? `.${[...node.classList].slice(0, 4).join('.')}` : '';
+    const type = node.getAttribute?.('type') ? `[type=${node.getAttribute('type')}]` : '';
+    return `<${node.tagName.toLowerCase()}${id}${cls}${type}>`;
+  };
+
+  const nodeText = (node, max = 70) =>
+    (node?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, max);
+
+  /**
    * Enough of each match to choose a watch target, and no more — this is for
    * finding the right selector, not for reading the page.
    */
@@ -217,25 +232,69 @@
       post({ type: 'mark', text: `query: invalid selector ${selector}` });
       return;
     }
-    const described = nodes.slice(0, 25).map((node, i) => {
-      const id = node.id ? `#${node.id}` : '';
-      const cls = node.classList.length ? `.${[...node.classList].slice(0, 4).join('.')}` : '';
-      const text = (node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 70);
-      return `${i}: <${node.tagName.toLowerCase()}${id}${cls}> ${text}`;
-    });
+    // Ten, not twenty-five: every frame on the page answers a query
+    // independently, so the reply is multiplied by frame count before it is
+    // ever read. Ten is enough to pick a target; the count says how much was
+    // left out.
+    const described = nodes.slice(0, 10).map((node, i) => `${i}: ${describeNode(node)} ${nodeText(node)}`);
     post({
       type: 'query',
       text: `${selector} → ${nodes.length} match(es)`,
-      detail: described.length ? clip(described.join('\n'), 2000) : undefined,
+      detail: described.length ? clip(described.join('\n'), 1200) : undefined,
     });
   };
+
+  // --- interactions --------------------------------------------------------
+
+  // What was clicked, not where the pointer is: coordinates are a firehose that
+  // says nothing about intent, while one line per interaction reconstructs the
+  // path someone took through the UI.
+  let interactions = config.interactions ?? 'clicks';
+  let hoverTimer = null;
+  let lastHovered = null;
+
+  document.addEventListener('click', (e) => {
+    if (interactions === 'off') return;
+    const target = e.target;
+    post({ type: 'interaction', text: `click ${describeNode(target)} ${clip(nodeText(target, 40), 40)}` });
+  }, true);
+
+  document.addEventListener('change', (e) => {
+    if (interactions === 'off') return;
+    const target = e.target;
+    // Never report what was typed into a password field, and only ever a clip
+    // of anything else — this is a record of what was touched, not of content.
+    if (target.type === 'password') {
+      post({ type: 'interaction', text: `change ${describeNode(target)} (value withheld)` });
+      return;
+    }
+    const value = target.type === 'file'
+      ? [...(target.files || [])].map((f) => f.name).join(', ')
+      : String(target.value ?? '');
+    post({ type: 'interaction', text: `change ${describeNode(target)} = ${clip(value, 60)}` });
+  }, true);
+
+  document.addEventListener('mouseover', (e) => {
+    if (interactions !== 'all') return;
+    const target = e.target;
+    clearTimeout(hoverTimer);
+    // Dwell, not movement: a cursor crossing the page is not a signal, a cursor
+    // stopping on something is.
+    hoverTimer = setTimeout(() => {
+      if (target === lastHovered) return;
+      lastHovered = target;
+      post({ type: 'interaction', text: `hover ${describeNode(target)} ${clip(nodeText(target, 40), 40)}` });
+    }, 1000);
+  }, true);
 
   // --- commands from the relay ---------------------------------------------
 
   window.addEventListener('message', (e) => {
     if (e.source !== window || !e.data) return;
     if (e.data.__snoopConfig) {
-      retarget(e.data.__snoopConfig.domScope);
+      const next = e.data.__snoopConfig;
+      if (next.interactions !== undefined) interactions = next.interactions;
+      if (next.domScope !== undefined) retarget(next.domScope);
       return;
     }
     const command = e.data.__snoopCommand;

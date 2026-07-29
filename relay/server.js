@@ -32,6 +32,7 @@ function format(event, page) {
     'ajax-error': 'AJAX FAIL',
     'resource-error': 'RESOURCE FAIL',
     'dom': 'DOM',
+    'interaction': 'YOU',
     'query': 'QUERY',
     'snapshot': 'SNAPSHOT',
     'mark': 'MARK',

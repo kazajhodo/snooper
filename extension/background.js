@@ -11,6 +11,7 @@ const defaults = {
   domains: ['ddev.site', 'localhost'],
   domScope: '',
   captureWarnings: false,
+  interactions: 'clicks',
 };
 
 let config = { ...defaults };
@@ -33,6 +34,12 @@ const SOLICITED = new Set(['mark', 'snapshot', 'query', 'ack']);
 // continuously, so left on the shared counter it starves everything else.
 const DOM_LIMIT = 6;
 let domCount = 0;
+
+// Interactions are usually cheap, but hover mode can run hot — and an event
+// budget spent narrating clicks is a budget not available for the error those
+// clicks produced.
+const INTERACTION_LIMIT = 20;
+let interactionCount = 0;
 
 const recent = new Map();
 let windowStart = Date.now();
@@ -82,6 +89,15 @@ async function handleCommand(raw) {
     return;
   }
 
+  if (command === 'interactions') {
+    const modes = ['off', 'clicks', 'all'];
+    const interactions = modes.includes(value) ? value : 'clicks';
+    await browser.storage.local.set({ interactions });
+    await pushToTabs({ __snoopConfig: { interactions } });
+    send({ type: 'ack', text: `interactions: ${interactions}`, at: Date.now() });
+    return;
+  }
+
   if (command === 'warnings') {
     const captureWarnings = value === 'on';
     await browser.storage.local.set({ captureWarnings });
@@ -98,7 +114,7 @@ async function handleCommand(raw) {
     send({
       type: 'ack',
       at: Date.now(),
-      text: `enabled=${config.enabled} scope=${config.domScope || '(none)'} warnings=${config.captureWarnings} domains=${config.domains.join(',') || '(all)'}`,
+      text: `enabled=${config.enabled} scope=${config.domScope || '(none)'} interactions=${config.interactions} warnings=${config.captureWarnings} domains=${config.domains.join(',') || '(all)'}`,
     });
   }
 }
@@ -128,10 +144,18 @@ function allow(event) {
     windowStart = now;
     windowCount = 0;
     domCount = 0;
+    interactionCount = 0;
     suppressedNotice = false;
   }
 
   if (SOLICITED.has(event.type)) return true;
+
+  if (event.type === 'interaction' && ++interactionCount > INTERACTION_LIMIT) {
+    if (interactionCount === INTERACTION_LIMIT + 1) {
+      send({ type: 'suppressed', text: `interactions capped (${INTERACTION_LIMIT}/min)`, at: now });
+    }
+    return false;
+  }
 
   if (event.type === 'dom' && ++domCount > DOM_LIMIT) {
     if (domCount === DOM_LIMIT + 1) {

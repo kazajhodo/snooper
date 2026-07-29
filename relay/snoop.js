@@ -6,13 +6,14 @@
  *   node snoop.js scope 'form[id^="neo-component-"]'
  *   node snoop.js scope off
  *   node snoop.js snap [selector]
+ *   node snoop.js interactions off|clicks|all
  *   node snoop.js warnings on|off
  *   node snoop.js status
  */
 import WebSocket from 'ws';
 
 const [command, ...rest] = process.argv.slice(2);
-const valid = ['scope', 'snap', 'query', 'warnings', 'status'];
+const valid = ['scope', 'snap', 'query', 'interactions', 'warnings', 'status'];
 
 if (!command || !valid.includes(command)) {
   process.stderr.write(`usage: snoop.js <${valid.join('|')}> [value]\n`);

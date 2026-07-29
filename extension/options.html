@@ -32,6 +32,13 @@
   <label for="domScope">DOM scope <span class="hint">CSS selector; changes inside it are reported as summaries. Blank disables DOM watching.</span></label>
   <input type="text" id="domScope" placeholder=".neo-alchemist-form">
 
+  <label for="interactions">Interactions <span class="hint">report what you click and change, so the path through the UI is visible</span></label>
+  <select id="interactions">
+    <option value="clicks">Clicks and field changes (default)</option>
+    <option value="all">Also hover dwell (noisy)</option>
+    <option value="off">Off</option>
+  </select>
+
   <div class="row">
     <input type="checkbox" id="captureWarnings">
     <label for="captureWarnings">Also capture <code>console.warn</code> <span class="hint">(noisy)</span></label>

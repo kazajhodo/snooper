@@ -52,7 +52,23 @@ Then open the extension's options page and set:
 | Relay | Where to publish. Default `ws://localhost:8787/publish`. |
 | Domains | Only watch these. Default `ddev.site, localhost` — keeps it off real sites. |
 | DOM scope | CSS selector. Changes inside it are summarised. **Blank disables DOM watching**, which is the right default until you need it. |
+| Interactions | `clicks` (default), `all`, `off` — see below. |
 | Capture `console.warn` | Off by default. Noisy. |
+
+### Interactions
+
+Reports **what you touched**, not where the cursor is. Coordinates are a
+firehose that says nothing about intent; one line per interaction reconstructs
+the path through the UI at a fraction of the cost.
+
+- `clicks` — clicks and field changes. Low volume, high signal, on by default.
+- `all` — adds hover *dwell* (a cursor that stops for a second, not one that
+  crosses the page). Noisy; reach for it when you need to know what someone was
+  looking at.
+- `off` — when watching for one specific thing.
+
+Password fields report that they changed and never what they contain; every
+other value is clipped. File inputs report the filename.
 
 ### 3. Claude subscribes
 
@@ -69,6 +85,7 @@ frame becomes a notification.
 | `AJAX FAIL` | jQuery `ajaxError` — **including the response body**, which is where a Drupal AJAX 500's exception message lives |
 | `RESOURCE FAIL` | failed subresource loads |
 | `DOM` | coalesced mutation summary inside the scope, plus any `.messages` / `[role=alert]` text that appeared |
+| `YOU` | what you clicked or changed — the path you took through the UI, not pointer coordinates |
 | `SNAPSHOT` | on request only |
 | `MARK` | on request only |
 
@@ -93,5 +110,9 @@ Marks and snapshots bypass dedupe — they were asked for.
   asked for, so they never count against the spontaneous budget.
 - Identical events collapse within 5 seconds.
 - Snapshots are capped at 12KB, other text at 800 chars.
+- **Queries answer per frame.** A page with preview iframes has every frame
+  reply independently, so a query's cost is multiplied before you read it —
+  hence 10 matches per frame, not 25. The reported count still tells you what
+  was left out.
 - The page-world hooks are installed at `document_start`, but jQuery usually is
   not defined yet — the AJAX hook retries for 10s before giving up.

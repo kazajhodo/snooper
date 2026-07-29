@@ -7,6 +7,7 @@
     domains: ['ddev.site', 'localhost'],
     domScope: '',
     captureWarnings: false,
+    interactions: 'clicks',
   };
   const config = { ...defaults, ...(await browser.storage.local.get(defaults)) };
 
@@ -21,6 +22,7 @@
   script.dataset.snoopConfig = JSON.stringify({
     domScope: config.domScope,
     captureWarnings: config.captureWarnings,
+    interactions: config.interactions,
   });
   (document.head || document.documentElement).prepend(script);
   script.remove();
