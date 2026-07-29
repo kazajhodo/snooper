@@ -137,7 +137,8 @@
   // element wholesale rather than mutating it, and an observer stays bound to
   // the node it was given — so without re-binding, watching survives exactly
   // one rebuild and then goes quiet without saying so.
-  const observed = new WeakSet();
+  let observed = new WeakSet();
+  let observers = [];
 
   const startScopeWatch = () => {
     const selector = config.domScope;
@@ -146,7 +147,7 @@
     if (!root || observed.has(root)) return false;
     observed.add(root);
 
-    new MutationObserver((records) => {
+    const observer = new MutationObserver((records) => {
       pending = pending || { scope: selector, added: 0, removed: 0, attributes: 0, messages: [] };
       for (const record of records) {
         if (record.type === 'attributes') {
@@ -163,28 +164,32 @@
       // Coalesced: one AJAX rebuild produces hundreds of records and is one
       // event as far as anyone watching is concerned.
       if (!flushTimer) flushTimer = setTimeout(summarise, 400);
-    }).observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'disabled', 'hidden'] });
+    });
+
+    observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'disabled', 'hidden'] });
+    observers.push(observer);
 
     return true;
   };
 
-  if (config.domScope) {
-    // Polled rather than one-shot: the scope element usually arrives with an
-    // AJAX response instead of the page, and is replaced again on every
-    // subsequent one. Cheap — a querySelector against a WeakSet check — and it
-    // runs for the life of the page so a scope that comes and goes keeps being
-    // picked up.
+  // Polled rather than one-shot: the scope element usually arrives with an AJAX
+  // response instead of the page, and is replaced again on every subsequent
+  // one. Cheap — a querySelector against a WeakSet check — and it runs for the
+  // life of the page so a scope that comes and goes keeps being picked up.
+  startScopeWatch();
+  setInterval(startScopeWatch, 1000);
+
+  const retarget = (selector) => {
+    for (const observer of observers) observer.disconnect();
+    observers = [];
+    observed = new WeakSet();
+    config.domScope = selector || '';
     startScopeWatch();
-    setInterval(startScopeWatch, 1000);
-  }
-
-  // --- manual marks --------------------------------------------------------
-
-  window.__snoop = (note) => {
-    post({ type: 'mark', text: clip(note) });
   };
 
-  window.__snoop.snap = (selector) => {
+  // --- inspection ----------------------------------------------------------
+
+  const snapshot = (selector) => {
     const target = document.querySelector(selector || config.domScope || 'body');
     if (!target) {
       post({ type: 'mark', text: `snap: nothing matches ${selector || config.domScope}` });
@@ -196,4 +201,53 @@
       detail: clip(target.outerHTML.replace(/\s+/g, ' '), MAX_SNAPSHOT),
     });
   };
+
+  /**
+   * Enough of each match to choose a watch target, and no more — this is for
+   * finding the right selector, not for reading the page.
+   */
+  const query = (selector) => {
+    let nodes;
+    try {
+      nodes = [...document.querySelectorAll(selector)];
+    }
+    catch {
+      post({ type: 'mark', text: `query: invalid selector ${selector}` });
+      return;
+    }
+    const described = nodes.slice(0, 25).map((node, i) => {
+      const id = node.id ? `#${node.id}` : '';
+      const cls = node.classList.length ? `.${[...node.classList].slice(0, 4).join('.')}` : '';
+      const text = (node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 70);
+      return `${i}: <${node.tagName.toLowerCase()}${id}${cls}> ${text}`;
+    });
+    post({
+      type: 'query',
+      text: `${selector} → ${nodes.length} match(es)`,
+      detail: described.length ? clip(described.join('\n'), 2000) : undefined,
+    });
+  };
+
+  // --- commands from the relay ---------------------------------------------
+
+  window.addEventListener('message', (e) => {
+    if (e.source !== window || !e.data) return;
+    if (e.data.__snoopConfig) {
+      retarget(e.data.__snoopConfig.domScope);
+      return;
+    }
+    const command = e.data.__snoopCommand;
+    if (!command) return;
+    if (command.name === 'snap') snapshot(command.value);
+    if (command.name === 'query') query(command.value);
+  });
+
+  // --- manual marks --------------------------------------------------------
+
+  window.__snoop = (note) => {
+    post({ type: 'mark', text: clip(note) });
+  };
+
+  window.__snoop.snap = snapshot;
+  window.__snoop.query = query;
 })();

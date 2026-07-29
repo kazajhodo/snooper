@@ -44,8 +44,62 @@ function connect() {
   socket.addEventListener('open', () => {
     retry = 0;
   });
+  socket.addEventListener('message', (e) => handleCommand(e.data));
   socket.addEventListener('close', scheduleRetry);
   socket.addEventListener('error', () => socket?.close());
+}
+
+/**
+ * Commands arrive back down the same socket, so whoever is watching the stream
+ * can retarget the watch without touching the options page.
+ */
+async function handleCommand(raw) {
+  let message;
+  try {
+    message = JSON.parse(raw);
+  }
+  catch {
+    return;
+  }
+
+  const { command, value } = message;
+
+  if (command === 'scope') {
+    const domScope = (!value || value === 'off') ? '' : value;
+    await browser.storage.local.set({ domScope });
+    await pushToTabs({ __snoopConfig: { domScope, captureWarnings: config.captureWarnings } });
+    send({ type: 'ack', text: domScope ? `scope set: ${domScope}` : 'scope cleared', at: Date.now() });
+    return;
+  }
+
+  if (command === 'warnings') {
+    const captureWarnings = value === 'on';
+    await browser.storage.local.set({ captureWarnings });
+    send({ type: 'ack', text: `console.warn capture ${captureWarnings ? 'on' : 'off'} (takes effect on page reload)`, at: Date.now() });
+    return;
+  }
+
+  if (command === 'snap' || command === 'query') {
+    await pushToTabs({ __snoopCommand: { name: command, value } });
+    return;
+  }
+
+  if (command === 'status') {
+    send({
+      type: 'ack',
+      at: Date.now(),
+      text: `enabled=${config.enabled} scope=${config.domScope || '(none)'} warnings=${config.captureWarnings} domains=${config.domains.join(',') || '(all)'}`,
+    });
+  }
+}
+
+/**
+ * Only tabs the content script actually runs in — a command sent to a tab with
+ * no listener rejects, and an unhandled rejection per tab is noise.
+ */
+async function pushToTabs(payload) {
+  const tabs = await browser.tabs.query({});
+  await Promise.all(tabs.map((tab) => browser.tabs.sendMessage(tab.id, payload).catch(() => {})));
 }
 
 function scheduleRetry() {

@@ -29,4 +29,12 @@
     if (e.source !== window || !e.data?.__snoop) return;
     browser.runtime.sendMessage({ __snoop: true, event: e.data.event, page: location.pathname + location.search });
   });
+
+  // Live retargeting from the relay, so a scope change costs a command rather
+  // than a visit to the options page and a reload.
+  browser.runtime.onMessage.addListener((message) => {
+    if (message?.__snoopConfig || message?.__snoopCommand) {
+      window.postMessage(message, '*');
+    }
+  });
 })();
