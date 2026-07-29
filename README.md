@@ -6,6 +6,30 @@ events instead of being copy-pasted into the chat.
 
 The point is to close the feedback loop: you drive, Claude sees the result.
 
+## What it looks like in use
+
+You click through the UI; Claude receives this without you typing anything:
+
+```
+[18:00:01] YOU   /node/999167/alchemist/full · click <input#edit-…-csv-upload[type=file]>
+[18:00:04] YOU   /node/999167/alchemist/full · change <input#edit-…-csv-upload[type=file]> = blink-codes.csv
+[18:00:05] DOM   /node/999167/alchemist/full · form.neo-alchemist--component-form: +169 node(s), −169 node(s)
+    Error message File already locked for writing. Upload a CSV
+[18:00:07] AJAX FAIL 500 /node/999167/alchemist/full/edit/f9716195
+    TypeError: TableCsv::text(): Argument #1 must be of type string, Markup given
+```
+
+And Claude can interrogate the page directly, without touching your browser:
+
+```
+node relay/snoop.js query 'form[id^="neo-component-"]'
+node relay/snoop.js query 'tbody tr' --in size=desktop
+node relay/snoop.js scope 'form.neo-alchemist--component-form'
+```
+
+**Requirements:** Node 18+ for the relay (one dependency, `ws`), and a Firefox
+build that runs unsigned add-ons.
+
 ## Why it is shaped this way
 
 **The browser half only.** Server-side errors are already available without a
@@ -36,16 +60,62 @@ subscribes to `/subscribe`. It keeps the last 50 events and replays the last 15
 to a subscriber that attaches late, since Claude connects on demand rather than
 at browser start.
 
-### 2. Extension
+### 2. Extension (Firefox Developer Edition)
 
-Firefox Developer Edition, unsigned:
+This is unsigned, so it needs a Firefox build that will run unsigned add-ons:
+**Developer Edition, Nightly, or ESR**. Release and Beta will not, at any pref —
+they enforce signing unconditionally, so there is no workaround there.
 
-- **Temporary** (simplest, resets on restart) — `about:debugging#/runtime/this-firefox`
-  → *Load Temporary Add-on* → pick `extension/manifest.json`.
-- **Persistent** — set `xpinstall.signatures.required=false` in `about:config`,
-  zip the contents of `extension/` into an `.xpi` and install it.
+#### Option A — temporary (start here)
 
-Then open the extension's options page and set:
+No preference change, works immediately, **gone on restart**.
+
+1. `about:debugging#/runtime/this-firefox`
+2. *Load Temporary Add-on…*
+3. Select `extension/manifest.json` (the manifest itself, not the folder)
+
+Good for trying it; annoying as a daily driver because it must be re-loaded
+every time Firefox starts.
+
+#### Option B — permanent
+
+1. `about:config` → accept the warning
+2. Search **`xpinstall.signatures.required`** → set it to **`false`**
+   (it is `true` even in Developer Edition, so this step is required)
+3. Build the `.xpi` — **zip the *contents* of `extension/`, not the folder**.
+   `manifest.json` has to sit at the archive root or Firefox rejects it:
+   ```
+   cd extension && zip -r ../snooper.xpi . -x '.*'
+   ```
+4. `about:addons` → gear icon → *Install Add-on From File…* → pick `snooper.xpi`
+
+#### Verify it is connected
+
+With the relay running, `lsof -nP -i :8787` should show a `firefox` line. That
+only proves the background page connected — see the reload gotcha below for why
+that is not the same as the page being watched.
+
+### ⚠ Reloading: the one thing that will waste your time
+
+**Reloading the add-on does NOT re-inject into already-open tabs.** The content
+script is injected at page load; reloading the extension replaces the background
+page but leaves every open tab running the *previous* `inject.js`.
+
+So after any change to the extension:
+
+1. Reload the add-on (`about:debugging` → *Reload*, or reinstall the `.xpi`)
+2. **Reload the pages you are watching** — a plain F5
+
+Skip step 2 and you get the old behaviour with no error anywhere, which reads
+exactly like "the fix didn't work". This cost an hour the first time.
+
+Same applies to the relay: it can be stopped and started freely (the extension
+reconnects with backoff), but a *schema* change between relay and extension
+needs both restarted.
+
+### 3. Options
+
+Open the extension's options page and set:
 
 | Setting | What it does |
 |---|---|
@@ -70,7 +140,7 @@ the path through the UI at a fraction of the cost.
 Password fields report that they changed and never what they contain; every
 other value is clipped. File inputs report the filename.
 
-### 3. Claude subscribes
+### 4. Claude subscribes
 
 Claude opens `ws://localhost:8787/subscribe` with its `Monitor` tool and each
 frame becomes a notification.
