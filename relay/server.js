@@ -63,14 +63,29 @@ function countOf(event) {
   return match ? Number(match[1]) : 0;
 }
 
-function bufferQuery(event, page) {
-  const key = event.selector || event.text || '?';
+/**
+ * The selector alone, however the extension phrased it. Older builds send only
+ * the rendered text ("sel → 3 match(es)"), and the key has to be identical
+ * either way or one query lands in two buckets.
+ */
+function selectorOf(event) {
+  if (event.selector) return event.selector;
+  return (event.text || '?').replace(/\s*→\s*\d+\s*match\(es\)\s*$/, '');
+}
+
+function openQuery(key) {
   let entry = pendingQueries.get(key);
   if (!entry) {
     entry = { frames: [], timer: null };
     pendingQueries.set(key, entry);
     entry.timer = setTimeout(() => flushQuery(key), QUERY_WINDOW_MS);
   }
+  return entry;
+}
+
+function bufferQuery(event, page) {
+  const key = selectorOf(event);
+  const entry = openQuery(key);
   const count = countOf(event);
   // Nested same-origin frames answer twice with identical results.
   const seen = entry.frames.some((f) => f.page === page && f.count === count && f.detail === event.detail);
@@ -85,6 +100,12 @@ function flushQuery(key) {
   if (!entry) return;
 
   const time = new Date().toTimeString().slice(0, 8);
+  if (!entry.frames.length) {
+    // No frame answered at all — usually a --in filter that matched nothing.
+    // Saying so beats silence, which reads identically to "zero matches".
+    broadcast(`[${time}] QUERY ${key} · no frame answered (filter matched no frame, or no page is listening)`);
+    return;
+  }
   const hits = entry.frames.filter((f) => f.count > 0);
   let line = `[${time}] QUERY ${key} · ${hits.length}/${entry.frames.length} frame(s) matched`;
   for (const hit of hits) {
